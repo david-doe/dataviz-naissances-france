@@ -1,0 +1,9 @@
+# Données INSEE : trop lourdes pour GitHub, à récupérer avec telecharger_donnees.R
+donnees/*.csv
+
+# Fichiers de travail RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.RDataTmp*
+*_cache/

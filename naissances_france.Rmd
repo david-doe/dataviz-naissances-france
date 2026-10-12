@@ -1,0 +1,307 @@
+---
+title: "Les naissances en France, 2018-2024"
+author: "Roman Delbare et David Doe"
+date: "2026-04-16"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages utilisés
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(scales) #Package trouvé en ligne qui permet de forcer un affichage propre des grandes valeurs 
+library(sf)
+library(patchwork)
+library(tidyverse)
+library(ggrepel)
+```
+
+
+# Palette de couleurs utilisé
+
+Pour garder une certaine cohérence dans nos visualisations nous essayerons d'utiliser la palette de couleurs suivantes :
+```{r}
+palette <- c(
+  "#1F4E79", 
+  "#4F81BD", 
+  "#A6C8E0",   "#7F7F7F", 
+  "#BFBFBF", 
+  "#C0504D", 
+  "#9BBB59"  
+)
+```
+NB : Nous l'avons généré à l'aide de l'IA en lui demandant d'avoir une palette de 6 couleurs type INSEE 
+
+
+# Chargement des données 
+
+Lien : https://www.insee.fr/fr/statistiques/6652024?sommaire=6652160
+
+```{r}
+df = read.csv2("donnees/FD_NAIS_2021.csv")
+```
+
+Nb pour la seconde visualisation nous réutilisons (pour se simplifier la tâche) une base utilisé durant le cours sur les données géographiques dont le lien est :
+
+https://geoservices.ign.fr/documentation/diffusion/telechargement-donnees-libres.html (ou le fichier zip 'DEPARTEMENT.shp' sur la page moodle du cours)
+
+```{r}
+map_fr = st_read("donnees/DEPARTEMENT.shp")
+```
+
+
+Nb pour la troisième visualisation nous utiliserons également d'autres bases (exactement la même structure mais concernent des années différentes) :
+
+- Naissances 2018 : https://www.insee.fr/fr/statistiques/4215180
+- Naissances 2019 : https://www.insee.fr/fr/statistiques/4768335
+- Naissances 2020 : https://www.insee.fr/fr/statistiques/5419788
+- Naissances 2022 : https://www.insee.fr/fr/statistiques/7708070
+- Naissances 2023 : https://www.insee.fr/fr/statistiques/8285987
+- Naissances 2024 : https://www.insee.fr/fr/statistiques/8610295
+
+```{r}
+nais_2018 <- read_csv2("donnees/Nais2018.csv")     %>% mutate(ANNEE = 2018) # Le mutate servira plus tard
+nais_2019 <- read_csv2("donnees/FD_NAIS_2019.csv") %>% mutate(ANNEE = 2019) # Le mutate servira plus tard 
+nais_2020 <- read_csv2("donnees/FD_NAIS_2020.csv") %>% mutate(ANNEE = 2020) # Le mutate servira plus tard 
+nais_2021 <- read_csv2("donnees/FD_NAIS_2021.csv") %>% mutate(ANNEE = 2021) # Le mutate servira plus tard 
+nais_2022 <- read_csv2("donnees/FD_NAIS_2022.csv") %>% mutate(ANNEE = 2022) # Le mutate servira plus tard 
+nais_2023 <- read_csv2("donnees/FD_NAIS_2023.csv") %>% mutate(ANNEE = 2023) # Le mutate servira plus tard 
+nais_2024 <- read_csv2("donnees/FD_NAIS_2024.csv") %>% mutate(ANNEE = 2024) # Le mutate servira plus tard
+```
+
+
+
+# 1 Quel est l'origine du nom des enfants en 2021 en fonction de leurs sexe ?
+
+Nous allons ici chercher à savoir quel est l'origine du nom des nouveaux nés en 2021. Héritent-ils du nom de leurs pères ? De leurs mères ? D'un mélange des deux ? Ce choix est-il lié au sexe de l'enfant ? 
+
+## Travail préalable sur le df
+```{r}
+origine = c("Père", "Mère", "Père puis mère", "Mère puis père", "Autre")
+df = df %>% mutate(
+  ORIGINOM = factor(ORIGINOM, levels = c(1,2,3,4,5), labels = origine))
+
+# On a quelques NA, on peut logiquement les regrouper avec la catégorie 'Autre'
+df$ORIGINOM_REC <- as.character(df$ORIGINOM)
+df$ORIGINOM_REC[is.na(df$ORIGINOM)] <- "Autre"
+df$ORIGINOM_REC <- factor(df$ORIGINOM_REC)
+
+# Recodage de df$SEXE en df$SEXE_REC
+df$SEXE_REC <- as.character(df$SEXE)
+df$SEXE_REC[df$SEXE == "1"] <- "Masculin"
+df$SEXE_REC[df$SEXE == "2"] <- "Féminin"
+df$SEXE_REC <- factor(df$SEXE_REC) # Nb : Pour recoder plus rapidement, nous avons utilisé la fonctionnalité 'Levels recoding' de questionR qui nous a été présentée dans le cours de R.
+```
+
+## Visualisation 1 : Origine du nom en fonction du sexe 
+```{r}
+ggplot(df, aes(x = ORIGINOM_REC, fill = ORIGINOM_REC)) +
+  geom_bar() +
+  scale_y_continuous(limits = c(0, 320000),breaks = seq(0, 320000, 100000),labels = comma)+
+  scale_x_discrete(limits = c("Père", "Père puis mère", "Mère", "Mère puis père", "Autre"))+
+  labs(x = "Origine du nom", y = "Nombre d'enfants concernés", caption = "Note : L'origine du nom renvoie à la façon dont le nom du nouveau-né a été choisi.
+Par exemple, la modalité « Père puis mère » signifie que le nom est une union des noms des parents dont le premier \nélément est celui du père.", title = "Origine du nom de l'enfant selon son sexe")+
+  facet_wrap(~SEXE_REC)+
+  theme_minimal()+
+  theme(plot.caption = element_text(colour = "darkgrey", hjust = 0, face = "italic", size = 8),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        legend.position = "none",
+        panel.grid.major.x = element_blank(), #Ajout de l'IA
+  panel.grid.minor = element_blank())+ # Ajout de l'IA
+  scale_fill_manual(values = palette)+
+  geom_text(stat = "count", aes(label = scales::comma(..count..)),
+          vjust = -0.5, size = 3) # Ajout de l'IA
+```
+
+## Apport de l'IA à la première visualisation 
+
+Ici l'IA nous à fait les suggestions suivantes : 
+
+- Ajouter un coord_flip() pour simplifier la lecture, ce que nous n'avons pas fait car on trouve au contraire que avec un facet_wrap() le renversement des axes a au contraire tendance à la complexifier.
+
+- Ne mettre en couleur que les deux barres relatives à la modalité père pour accentuer ce qu'on cherche à montrer, nous n'appliquons pas cette suggestion car nous estimons que les écarts entre les barres sont déjà assez explicite et donc on perdrait en qualitée éstethique pour 'rien'.
+
+- Ajouter les valeurs chiffrés aux barres pour avoir plus de détails en ajoutant cette ligne au code :
+'geom_text(stat = "count", aes(label = scales::comma(..count..)), vjust = -0.5, size = 3)'. Effectivement ca peut servir au lecteur qui souhaite avoir plus de détails, on ajoute donc cet élément à notre visualisation. 
+
+- Ajouter l'argument 'scales = "fixed"' au facet_wrap pour avoir une échelle similaire sur toutes nos facettes, ici c'est inutile car nos facettes partagent déjà la même échelle. 
+
+- Alléger le visuel en ajoutant ces arguments à theme() : 
+  panel.grid.major.x = element_blank()
+  panel.grid.minor = element_blank()
+Cette modification permet effectivement d'avoir un rendu plus 'propre', on y a donc recouru.
+
+De plus comme évoqué précedemment nous avons eu recourt à notre palette de couleurs type INSEE qu'on à construit via l'IA. 
+
+## Regard critique sur la visualisation 
+
+Notre palette de couleur joue 'trop' avec les nuances ce qui peut les rendres difficilement différenciable par un(e) daltonien(ne). Néanmoins on pense que la présentation sous la forme de diagrame en barre permet de contrer en grande partie ce problème en permettant toujours la lecture de l'information principale.
+
+Nous avons hesité à parler en terme de % plutôt qu'en terme de données brutes ici mais nous avons finalement choisi de travailler avec les nombres brutes car on trouve que l'ordre de grandeur de ces derniers (centaines de milliers) permet inconsciemment d'accentuer dans la tête du lecteur le phénomène qu'on cherche à représenter (L'écrasante place du lien paternel dans l'origine du nom).
+
+
+
+
+
+
+# 2 Comment se répartissent les naissances entre les départements de France métropolitaine ? 
+
+Nous cherchons ici à cartographier les naissances en France métropolitaine avec une carte du nombre de naissances par département. Attention : il s'agit d'un nombre de naissances, pas d'un taux de fécondité. Un département très peuplé comme Paris a mécaniquement plus de naissances. 
+NB : Nous nous limitons ici à la france métropolitaine par soucis de praticité dans la création des visuels suivants. Cela ne biaise pas nos résultats car d'après nos données en 2021 seul ~5% des naissances concernent les territoires d'outre mer. De plus le nombre de naissance dans ces derniers est très similaire au reste des département français, il n'y à pas d'évenement marquants à souligner (les départements qui comptent le plus et le moins de naissances se trouvent tous les deux en France métropolitaine)
+
+
+## Travail préalable sur les données 
+
+```{r}
+map_fr = st_read("donnees/DEPARTEMENT.shp") #On reprend la bdd geo avec les departements français utilisé en cours pour nous simplifier la tâche comme elle a peu de variables (diminue la durée des calculs) et qu'il y à déja les numéros de département dedans
+
+df_n = df %>% count(DEPNAIS, name = "nb_naiss")
+df_n = df_n %>% mutate(
+  CODE_DEPT = DEPNAIS
+)
+
+df_join = left_join(map_fr, df_n)
+df_idf <- df_join %>% filter(CODE_DEPT %in% c("75", "77", "78", "91", "92", "93", "94", "95"))
+```
+
+## Visualisation 2 : Nombre de naissances par département en France métropolitaine en 2021
+
+```{r}
+carte = ggplot(df_join, mapping = aes (fill = nb_naiss))+
+  geom_sf()+
+  geom_sf(data = df_join %>% filter(CODE_DEPT == "48"), fill = "indianred1")+ 
+  geom_sf(data = df_join %>% filter(CODE_DEPT == "75"), fill = "lightgreen")+
+  geom_sf(data = st_as_sfc(st_bbox(df_idf)), fill = NA, color = "black", linewidth = 0.6) + # Cadre construit via IA
+  theme_void()+
+  geom_sf_text(data = df_join %>% filter(!CODE_DEPT %in% c("75", "77", "78", "91", "92", "93", "94", "95")), 
+             aes(label = CODE_DEPT), size = 2.5)+ # idée de l'IA voir la partie apport de l'IA ci dessous
+  scale_fill_gradient(low =  "#A6C8E0" , high = "#1F4E79" )+
+  labs(fill = "Nombre de naissances")+
+  theme(legend.position = c(0,0.35))
+
+p_zoom <- ggplot(df_idf, aes(fill = nb_naiss)) +
+  geom_sf() +
+  geom_sf(data = df_idf %>% filter(CODE_DEPT == "75"), fill = "lightgreen") +
+  geom_sf_text(aes(label = CODE_DEPT), size = 2) +
+  scale_fill_gradient(low = "#A6C8E0", high = "#1F4E79") +
+  theme_void() +
+  theme(legend.position = "none", 
+        panel.border = element_rect(colour = "black", fill = NA, size = 0.5)) 
+
+carte + inset_element(p_zoom, # Permet de créer notre zoom sur l'idf 
+                       left = 0.85,   
+                       bottom = 0.5, 
+                       right = 1.3,  
+                       top = 1)+
+  plot_annotation(title = "Nombre de naissances par départements de france métropolitaine en 2021", caption = "Note : la Lozère (48) compte le moins de naissances (430).\nA l'inverse Paris (75) en compte le plus (41 880).") & 
+  theme(plot.title = element_text(hjust = 0.5, size = 13, face = "bold"),
+    plot.caption = element_text(hjust = 0, face = "italic", size = 10))
+```
+## Apport de l'IA à la seconde visualisation 
+
+Ici nous avons utilisé l'IA pour nous aider à produire le code permettant de zoomer sur l'île de france (sans qu'elle ne le suggère d'elle même, c'est nous qui l'avons guidé pour le faire et qui avons du repasser (vraiement beaucoup de fois ...) derrière ce qu'elle à produit pour obtenir ce rendu)
+
+Lorsque nous avons demandé à l'IA des suggestions pour améliorer notre visualisation, ses suggestions furent les suivantes :
+
+- Enlever les numéros de département d'ile de france qui étaient les uns sur les autres. Etant donné que nous avions en plus de ca déjà fait le petit zoom sur l'IDF, nous avons jugé ce conseil pertinent et donc ajouté le filter adéquat dans le geom_sf_text
+
+- Initalement nous avions mis l'accent sur les départements 48 et 75 avec les couleurs "red" et "green". L'ia nous a proposer des couleurs qui s'inséraient mieux dans notre graphique. Effectivement le rendu était plus 'propre' et nous avons donc adopté cette modification. 
+
+- Ajouter un petit cadre autour de l'idf pour harmoniser la carte avec notre zoom, ce que nous avons choisis d'appliquer.
+
+Notons également que nous ne parvenions pas à 'coller' la note au bord gauche de notre visualisation. Nous avons essayé de trouver une solution à l'aide de plusieurs modèles d'IA différents mais aucun d'entre eux n'a réussit à trouver une solution pertinente à notre problème. 
+
+
+
+
+
+# 3 Ou se situe l'année 2021 dans la trajectoire de l'évolution des naissances en France ? 
+
+Ici nous allons chercher à replacer l'année 2021 dans un cadre temporel relativement resseré (2018-2024) pour donner plus de contexte à nos données en les replacant dans une perspective plus large.
+
+## Travail préalable sur les données  
+
+```{r}
+nais_multi = bind_rows(nais_2018, nais_2019, nais_2020, nais_2021, nais_2022, nais_2023, nais_2024) 
+nais_annee = nais_multi %>% group_by(ANNEE) %>% summarise(Total = n())
+```
+
+## Visualisation 3 : Evolution du nombre de naissances en France entre 2018 et 2024 
+```{r}
+ggplot(data = nais_annee, mapping = aes(x = ANNEE, y = Total)) +
+  geom_line(linewidth = 1.2, color = "#4F81BD") +
+  geom_point(size = 4, color = "#1F4E79") +
+  geom_text_repel( aes(label = scales::number(Total, big.mark = " ")),  nudge_y = 15000,segment.color = NA, size = 3.5, fontface = "bold")+
+  scale_x_continuous(breaks = 2018:2024) +
+  scale_y_continuous(labels = scales::number_format(big.mark = " "),limits = c(620000, 800000)) +
+  labs( title = "Évolution du nombre de naissances en France de 2018 à 2024", x = "Année", y = "Nombre de naissances", caption = "Source : INSEE, Fichiers détail naissances 2018-2024") +
+  theme_minimal()+
+  theme(plot.title.position = "plot", plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 0, size = 9, face = "italic"))
+```
+## Apport de l'IA à la visualisation 
+
+L'ia à fait les suggestions suivantes : 
+
+- Utiliser geom_text_repel() au lieu de geom_text() car avec geom_text(), même en 'jouant' avec vjust, on avait toujours au moins un point superposé au texte. Etant donné que geom_text_repel() permet d'éviter ce problème et donc d'améliorer le graphique, c'est ce que nous avons finalement fait. 
+
+- Supprimer les coordonées sur l'axe y car nous mettons déjà les valeurs au dessus de chaque points. Nous ne considérons pas que c'est une bonne idée : le geom_text_repel() sert à ajouter de l'information supplémentaire, pas à remplacer une information existante. De plus ous trouvons que ne pas indiquer les échelles de grandeur d'un axe est plus trompeur qu'autre chose. 
+
+## Regard critique 
+
+Pour apporter encore plus de contexte, nous avions envisagé de réaliser un facet_wrap() présentant l'évolution du nombre de naissances dans d'autres pays limitrophes sur la même période. Néanmoins, nous avons peiné à trouver suffisamment de données pour certains d'entre eux et nous avions l'impression de trop nous éloigner du sujet initial. En effet, l'objectif de cette visualisation est de replacer l'année 2021 dans un contexte français plus large, et non de comparer la trajectoire de la natalité de la France avec celle de ses voisins. Nous avons donc renoncé à cette idée.
+
+
+# 4 Existe-t-il un lien entre l'âge du père et de celui la mère ? 
+
+
+## Travail préalable sur les données  
+
+Nb : ici nous faisons le choix de travailler avec un échantillon, constitué aléatoirement, de 10 000 individus car l'affichage des 700 000 points pose de nombreux problèmes, notamment en terme de visibilité même en 'jouant' avec quelques techniques pour rendre la lecture plus fluide (jitter, transparence des points etc...). 
+
+Les lois statistiques nous laisse supposer que piocher aléatoirement un échantillon de 10 000 personnes nous permet d'avoir un résultat représentatif de la réalité au vu de la taille de l'échantillon (la convergence vers les paramètres de population est assez rapide). 
+
+Néanmoins nous nous sommes tout de même également assurés 'manuellement' de la veracité de ce fait en comparant les statistiques descriptives de l'échantillon avec celles de la population. La très grande proximité entre les résultats pour les deux groupes nous permet d'affirmer le caractère représentatif d'un échantillon de cette taille sans même avoir à recourir à des tests d'inférence statistique. 
+```{r}
+set.seed(2021) # graine fixe : on retrouve le même échantillon à chaque exécution
+echantillon = df %>% slice_sample(n = 10000)
+summary(df)
+summary(echantillon)
+```
+
+
+## Visualisation 4 : Lien entre âge du père et âge de la mère 
+
+```{r}
+ggplot(echantillon, mapping = aes(x = AGEMERE, y = AGEPERE)) +
+  geom_point(alpha = 0.3, color = "#4F81BD") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "black")+ # Idée de l'IA voir ci dessous
+  geom_smooth(method = "lm", color = "#C0504D", se = TRUE) +
+  labs(title = "Lien entre âge du père et de la mère", subtitle = "Echantillon de 10 000 naissances - France, 2021", x = "Âge de la mère", y = "Âge du père", caption = "Note : La courbe en pointillé représente une situation théorique ou l'âge des pères est égale à l'âge des mères.\nLe fait que la droite de régression soit situé au dessus de cette courbe souligne le fait que les pères sont en moyenne\nlégérement plus agé que les mères. Notons néanmoins que cet effet diminue avec l'âge. ") +
+  theme_minimal()+
+  theme(plot.title.position = "plot", plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 0, size = 9, face = "italic"),
+        plot.subtitle = element_text(hjust = 0.48, face = "italic"))
+```
+## Apport de l'IA à la visualisation 
+
+Les propositions de l'iA sont : 
+
+- Ajouter une droite définie x = y pour bien souligner visuellement le fait que généralement le père est plus âgé que la mère. La propostion est pertinente, nous l'avons donc integré au graphique. 
+
+- Utiliser geom_jitter pour ajouter du bruit et faire ressortit visuellement nos 10 000 points. Nous n'apportons pas cette modification au graphique car cela en dégraderait grandement la lisibilité. Nous préférons 'jouer' avec la transparence des points. 
+
+## Regard critique sur la visualisation 
+
+De manière générale nous considérons que la visualisation est de bonne qualitée. Néanmoins cette dernière n'est peut être pas adapté pour tout le monde : quelqu'un qui n'a aucune connaissance en statistique peut prendre un petit peu plus de temps à comprendre l'idée qui se cache derrière une courbe de régression linéaire, même si elle est ici très simple. 
+Néanmoins nous pensons que la note en bas de graphique et la disposition générale du nuage de point permet à n'importe qui de pouvoir comprendre assez rapidement l'information que la visualisation tend à présenter. 
